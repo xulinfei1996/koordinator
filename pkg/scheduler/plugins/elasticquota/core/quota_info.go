@@ -43,6 +43,8 @@ type QuotaCalculateInfo struct {
 	Used v1.ResourceList
 	// All pods request
 	Request v1.ResourceList
+	// AutoLimitRequest is todo
+	AutoLimitRequest v1.ResourceList
 	// SharedWeight determines the ability of quota groups to compete for shared resources
 	SharedWeight v1.ResourceList
 	// Runtime is the current actual resource that can be used by the quota group
@@ -74,13 +76,14 @@ func NewQuotaInfo(isParent, allowLentResource bool, name, parentName string) *Qu
 		RuntimeVersion:    0,
 		PodCache:          make(map[string]*PodInfo),
 		CalculateInfo: QuotaCalculateInfo{
-			Max:          v1.ResourceList{},
-			AutoScaleMin: v1.ResourceList{},
-			Min:          v1.ResourceList{},
-			Used:         v1.ResourceList{},
-			Request:      v1.ResourceList{},
-			SharedWeight: v1.ResourceList{},
-			Runtime:      v1.ResourceList{},
+			Max:              v1.ResourceList{},
+			AutoScaleMin:     v1.ResourceList{},
+			Min:              v1.ResourceList{},
+			Used:             v1.ResourceList{},
+			Request:          v1.ResourceList{},
+			AutoLimitRequest: v1.ResourceList{},
+			SharedWeight:     v1.ResourceList{},
+			Runtime:          v1.ResourceList{},
 		},
 	}
 }
@@ -100,13 +103,14 @@ func (qi *QuotaInfo) DeepCopy() *QuotaInfo {
 		RuntimeVersion:    qi.RuntimeVersion,
 		PodCache:          make(map[string]*PodInfo),
 		CalculateInfo: QuotaCalculateInfo{
-			Max:          qi.CalculateInfo.Max.DeepCopy(),
-			AutoScaleMin: qi.CalculateInfo.AutoScaleMin.DeepCopy(),
-			Min:          qi.CalculateInfo.Min.DeepCopy(),
-			Used:         qi.CalculateInfo.Used.DeepCopy(),
-			Request:      qi.CalculateInfo.Request.DeepCopy(),
-			SharedWeight: qi.CalculateInfo.SharedWeight.DeepCopy(),
-			Runtime:      qi.CalculateInfo.Runtime.DeepCopy(),
+			Max:              qi.CalculateInfo.Max.DeepCopy(),
+			AutoScaleMin:     qi.CalculateInfo.AutoScaleMin.DeepCopy(),
+			Min:              qi.CalculateInfo.Min.DeepCopy(),
+			Used:             qi.CalculateInfo.Used.DeepCopy(),
+			Request:          qi.CalculateInfo.Request.DeepCopy(),
+			AutoLimitRequest: qi.CalculateInfo.AutoLimitRequest.DeepCopy(),
+			SharedWeight:     qi.CalculateInfo.SharedWeight.DeepCopy(),
+			Runtime:          qi.CalculateInfo.Runtime.DeepCopy(),
 		},
 	}
 	for name, pod := range qi.PodCache {
@@ -175,8 +179,17 @@ func (qi *QuotaInfo) getLimitRequestNoLock() v1.ResourceList {
 	for resName, quantity := range limitRequest {
 		if maxQuantity, ok := qi.CalculateInfo.Max[resName]; ok {
 			if quantity.Cmp(maxQuantity) == 1 {
-				//req > max, limitRequest = max
+				// req > max, limitRequest = max
 				limitRequest[resName] = maxQuantity.DeepCopy()
+			}
+		}
+	}
+
+	for resName, quantity := range limitRequest {
+		if autoLimitQuantity, ok := qi.CalculateInfo.AutoLimitRequest[resName]; ok {
+			if quantity.Cmp(autoLimitQuantity) == 1 {
+				// req > autoLimitRequest, limitRequest = autoLimitRequest
+				limitRequest[resName] = autoLimitQuantity.DeepCopy()
 			}
 		}
 	}
@@ -237,6 +250,12 @@ func (qi *QuotaInfo) getMax() v1.ResourceList {
 	return qi.CalculateInfo.Max.DeepCopy()
 }
 
+func (qi *QuotaInfo) getMin() v1.ResourceList {
+	qi.lock.Lock()
+	defer qi.lock.Unlock()
+	return qi.CalculateInfo.Min.DeepCopy()
+}
+
 func NewQuotaInfoFromQuota(quota *v1alpha1.ElasticQuota) *QuotaInfo {
 	isParent := extension.IsParentQuota(quota)
 	parentName := extension.GetParentQuotaName(quota)
@@ -261,6 +280,10 @@ func (qi *QuotaInfo) clearForResetNoLock() {
 	qi.CalculateInfo.Used = v1.ResourceList{}
 	qi.CalculateInfo.Runtime = v1.ResourceList{}
 	qi.RuntimeVersion = 0
+}
+
+func (qi *QuotaInfo) setAutoLimitRequestNoLock(autoLimitRequest v1.ResourceList) {
+	qi.CalculateInfo.AutoLimitRequest = autoLimitRequest.DeepCopy()
 }
 
 func (qi *QuotaInfo) isQuotaMetaChange(quotaInfo *QuotaInfo) bool {

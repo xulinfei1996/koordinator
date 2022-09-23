@@ -1092,10 +1092,12 @@ func NewGroupQuotaManager4Test() *GroupQuotaManager {
 		runtimeQuotaCalculatorMap:               make(map[string]*RuntimeQuotaCalculator),
 		scaleMinQuotaManager:                    NewScaleMinQuotaManager(),
 		quotaTopoNodeMap:                        make(map[string]*QuotaTopoNode),
+		oriQuotaMap:                             make(map[string]*v1alpha1.ElasticQuota),
 	}
 	quotaManager.quotaInfoMap[extension.SystemQuotaName] = NewQuotaInfo(false, true, extension.SystemQuotaName, "")
 	quotaManager.quotaInfoMap[extension.DefaultQuotaName] = NewQuotaInfo(false, true, extension.DefaultQuotaName, "")
 	quotaManager.runtimeQuotaCalculatorMap[extension.RootQuotaName] = NewRuntimeQuotaCalculator(extension.RootQuotaName)
+	quotaManager.gpuQuotaManager = NewGpuQuotaManager(quotaManager)
 	return quotaManager
 }
 
