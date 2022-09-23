@@ -48,6 +48,8 @@ type GroupQuotaManager struct {
 	scaleMinQuotaEnabled bool
 	// scaleMinQuotaManager is used when overRootResource
 	scaleMinQuotaManager *ScaleMinQuotaManager
+	gpuQuotaManager      *GpuQuotaManager
+	oriQuotaMap          map[string]*v1alpha1.ElasticQuota
 	once                 sync.Once
 }
 
@@ -59,6 +61,7 @@ func NewGroupQuotaManager(systemGroupMax, defaultGroupMax v1.ResourceList) *Grou
 		quotaInfoMap:                            make(map[string]*QuotaInfo),
 		runtimeQuotaCalculatorMap:               make(map[string]*RuntimeQuotaCalculator),
 		quotaTopoNodeMap:                        make(map[string]*QuotaTopoNode),
+		oriQuotaMap:                             make(map[string]*v1alpha1.ElasticQuota),
 		scaleMinQuotaManager:                    NewScaleMinQuotaManager(),
 	}
 	quotaManager.quotaInfoMap[extension.SystemQuotaName] = NewQuotaInfo(false, true, extension.SystemQuotaName, extension.RootQuotaName)
@@ -67,6 +70,7 @@ func NewGroupQuotaManager(systemGroupMax, defaultGroupMax v1.ResourceList) *Grou
 	quotaManager.quotaInfoMap[extension.DefaultQuotaName].setMaxQuotaNoLock(defaultGroupMax)
 	quotaManager.runtimeQuotaCalculatorMap[extension.RootQuotaName] = NewRuntimeQuotaCalculator(extension.RootQuotaName)
 	quotaManager.setScaleMinQuotaEnabled(true)
+	quotaManager.gpuQuotaManager = NewGpuQuotaManager(quotaManager)
 	return quotaManager
 }
 
@@ -126,12 +130,30 @@ func (gqm *GroupQuotaManager) updateGroupDeltaRequestNoLock(quotaName string, de
 
 	defer gqm.scopedLockForQuotaInfo(curToAllParInfos)()
 
-	gqm.updateGroupDeltaRequestTopoRecursiveNoLock(deltaReq, curToAllParInfos)
+	gqm.updateGroupDeltaRequestTopoRecursiveNoLock(deltaReq, curToAllParInfos, false)
+}
+
+func (gqm *GroupQuotaManager) updateGroupAutoLimitRequestNoLock(quotaName string, autoLimitRequest v1.ResourceList) {
+	curToAllParInfos := gqm.getCurToAllParentGroupQuotaInfoNoLock(quotaName)
+	allQuotaInfoLen := len(curToAllParInfos)
+	if allQuotaInfoLen <= 0 {
+		return
+	}
+
+	defer gqm.scopedLockForQuotaInfo(curToAllParInfos)
+
+	quotaInfo := curToAllParInfos[0]
+	deltaReq := quotav1.Subtract(quotaInfo.CalculateInfo.AutoLimitRequest, autoLimitRequest)
+	if quotav1.IsZero(deltaReq) {
+		return
+	}
+
+	gqm.updateGroupDeltaRequestTopoRecursiveNoLock(autoLimitRequest, curToAllParInfos, true)
 }
 
 // updateGroupDeltaRequestTopoRecursiveNoLock update the quota of a node, also need update all parentNode, the lock operation
 // of all quotaInfo is done by gqm. scopedLockForQuotaInfo, so just get treeWrappers' lock when calling treeWrappers' function
-func (gqm *GroupQuotaManager) updateGroupDeltaRequestTopoRecursiveNoLock(deltaReq v1.ResourceList, curToAllParInfos []*QuotaInfo) {
+func (gqm *GroupQuotaManager) updateGroupDeltaRequestTopoRecursiveNoLock(deltaReq v1.ResourceList, curToAllParInfos []*QuotaInfo, autoLimit bool) {
 	for i := 0; i < len(curToAllParInfos); i++ {
 		curQuotaInfo := curToAllParInfos[i]
 		directParRuntimeCalculatorPtr := gqm.getRuntimeQuotaCalculatorByNameNoLock(curQuotaInfo.ParentName)
@@ -140,7 +162,11 @@ func (gqm *GroupQuotaManager) updateGroupDeltaRequestTopoRecursiveNoLock(deltaRe
 			return
 		}
 		oldSubLimitReq := curQuotaInfo.getLimitRequestNoLock()
-		curQuotaInfo.addRequestNonNegativeNoLock(deltaReq)
+		if i == 0 && autoLimit {
+			curQuotaInfo.setAutoLimitRequestNoLock(deltaReq)
+		} else {
+			curQuotaInfo.addRequestNonNegativeNoLock(deltaReq)
+		}
 		newSubLimitReq := curQuotaInfo.getLimitRequestNoLock()
 		deltaReq = quotav1.Subtract(newSubLimitReq, oldSubLimitReq)
 
@@ -309,6 +335,7 @@ func (gqm *GroupQuotaManager) UpdateQuota(quota *v1alpha1.ElasticQuota, isDelete
 			return fmt.Errorf("get quota info failed, quotaName:%v", quotaName)
 		}
 		delete(gqm.quotaInfoMap, quotaName)
+		delete(gqm.oriQuotaMap, quotaName)
 	} else {
 		newQuotaInfo := NewQuotaInfoFromQuota(quota)
 		// update the local quotaInfo's crd
@@ -322,6 +349,8 @@ func (gqm *GroupQuotaManager) UpdateQuota(quota *v1alpha1.ElasticQuota, isDelete
 		} else {
 			gqm.quotaInfoMap[quotaName] = newQuotaInfo
 		}
+		// gpu updateQuotaMeta
+		gqm.oriQuotaMap[quotaName] = quota
 	}
 	gqm.updateQuotaGroupConfigNoLock()
 
@@ -598,4 +627,8 @@ func (gqm *GroupQuotaManager) GetQuotaSummary(quotaName string) (*QuotaInfoSumma
 	quotaSummary := quotaInfo.GetQuotaSummary()
 	quotaSummary.Runtime = runtime.DeepCopy()
 	return quotaSummary, true
+}
+
+func (gqm *GroupQuotaManager) getOriQuotaNoLock(quotaName string) *v1alpha1.ElasticQuota {
+	return gqm.oriQuotaMap[quotaName]
 }
