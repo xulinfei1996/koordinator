@@ -96,8 +96,6 @@ func (ctrl *Controller) syncHandler() []error {
 			ctrl.groupQuotaManager.RLock()
 			defer ctrl.groupQuotaManager.RUnLock()
 
-			klog.V(5).InfoS("Try to process elastic quota", "elasticQuota", eq.Name)
-
 			quotaInfo := ctrl.groupQuotaManager.GetQuotaInfoByNameNoLock(eq.Name)
 			if quotaInfo == nil {
 				errors = append(errors, fmt.Errorf("qroupQuotaManager has not have this quota:%v", eq.Name))
@@ -108,7 +106,7 @@ func (ctrl *Controller) syncHandler() []error {
 			request, _ := json.Marshal(quotaInfo.GetRequest())
 
 			// Ignore this loop if the runtime/request/used doesn't change
-			if quotav1.Equals(eq.Status.Used, used) &&
+			if (quotav1.Equals(eq.Status.Used, used) || (quotav1.IsZero(eq.Status.Used) && quotav1.IsZero(used))) &&
 				eq.Annotations[extension.AnnotationRuntime] == string(runtime) &&
 				eq.Annotations[extension.AnnotationRequest] == string(request) {
 				return

@@ -32,6 +32,10 @@ func (n *nodeDeviceCache) onPodAdd(obj interface{}) {
 		return
 	}
 
+	if pod.Spec.NodeName == "" {
+		return
+	}
+
 	info := n.getNodeDevice(pod.Spec.NodeName)
 	if info == nil {
 		klog.Errorf("node device cache not found, nodeName: %v", pod.Spec.NodeName)
