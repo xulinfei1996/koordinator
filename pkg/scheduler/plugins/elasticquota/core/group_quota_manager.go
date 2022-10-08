@@ -150,13 +150,6 @@ func (gqm *GroupQuotaManager) updateGroupDeltaRequestTopoRecursiveNoLock(deltaRe
 	}
 }
 
-func (gqm *GroupQuotaManager) UpdateGroupDeltaUsed(quotaName string, delta v1.ResourceList) {
-	gqm.hierarchyUpdateLock.RLock()
-	defer gqm.hierarchyUpdateLock.RUnlock()
-
-	gqm.updateGroupDeltaUsedNoLock(quotaName, delta)
-}
-
 // updateGroupDeltaUsedNoLock updates the usedQuota of a node, it also updates all parent nodes
 // no need to lock gqm.hierarchyUpdateLock
 func (gqm *GroupQuotaManager) updateGroupDeltaUsedNoLock(quotaName string, delta v1.ResourceList) {
@@ -506,6 +499,8 @@ func (gqm *GroupQuotaManager) UpdatePodUsed(quotaName string, oldPod, newPod *v1
 		return
 	}
 	if !quotaInfo.GetPodIsAssigned(newPod) && !quotaInfo.GetPodIsAssigned(oldPod) {
+		klog.V(5).Infof("updatePodUsed, quotaName:%v, newPodIsAssigned:%v, oldPodIsAssigned:%v",
+			quotaName, quotaInfo.GetPodIsAssigned(newPod), quotaInfo.GetPodIsAssigned(oldPod))
 		return
 	}
 
@@ -524,6 +519,8 @@ func (gqm *GroupQuotaManager) UpdatePodUsed(quotaName string, oldPod, newPod *v1
 
 	deltaUsed := quotav1.Subtract(newPodUsed, oldPodUsed)
 	if quotav1.IsZero(deltaUsed) {
+		klog.V(5).Infof("updatePodUsed, deltaUsedIsZero, quotaName:%v, newPodUsed:%v, oldPodUsed:%v",
+			quotaName, newPodUsed, oldPodUsed)
 		return
 	}
 	gqm.updateGroupDeltaUsedNoLock(quotaName, deltaUsed)
