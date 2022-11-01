@@ -91,6 +91,10 @@ func NewPodGroupController(client kubernetes.Interface,
 	return ctrl
 }
 
+func (ctrl *PodGroupController) Start() {
+	ctrl.Run(1, context.TODO().Done())
+}
+
 // Run starts listening on channel events
 func (ctrl *PodGroupController) Run(workers int, stopCh <-chan struct{}) {
 	defer ctrl.pgQueue.ShutDown()
@@ -102,6 +106,7 @@ func (ctrl *PodGroupController) Run(workers int, stopCh <-chan struct{}) {
 		return
 	}
 	klog.Infof("Pod Group sync finished")
+
 	for i := 0; i < workers; i++ {
 		go wait.Until(ctrl.worker, time.Second, stopCh)
 	}

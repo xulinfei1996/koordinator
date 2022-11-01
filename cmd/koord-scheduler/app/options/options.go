@@ -24,6 +24,7 @@ import (
 	schedulerappconfig "github.com/koordinator-sh/koordinator/cmd/koord-scheduler/app/config"
 	koordinatorclientset "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned"
 	koordinatorinformers "github.com/koordinator-sh/koordinator/pkg/client/informers/externalversions"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/controllers"
 	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/services"
 )
 
@@ -61,5 +62,6 @@ func (o *Options) Config() (*schedulerappconfig.Config, error) {
 		ServicesEngine:                   services.NewEngine(gin.New()),
 		KoordinatorClient:                koordinatorClient,
 		KoordinatorSharedInformerFactory: koordinatorSharedInformerFactory,
+		ControllersMap:                   controllers.NewControllersMap(),
 	}, nil
 }

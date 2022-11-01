@@ -28,6 +28,7 @@ import (
 
 	koordinatorclientset "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned"
 	koordinatorinformers "github.com/koordinator-sh/koordinator/pkg/client/informers/externalversions"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/controllers"
 	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/services"
 )
 
@@ -45,6 +46,7 @@ type extendedHandleOptions struct {
 	koordinatorClientSet             koordinatorclientset.Interface
 	koordinatorSharedInformerFactory koordinatorinformers.SharedInformerFactory
 	sharedListerAdapter              SharedListerAdapter
+	controllersMap                   *controllers.ControllersMap
 }
 
 type SharedListerAdapter func(lister framework.SharedLister) framework.SharedLister
@@ -75,6 +77,12 @@ func WithSharedListerFactory(adapter SharedListerAdapter) Option {
 	}
 }
 
+func WithControllersMap(controllersMap *controllers.ControllersMap) Option {
+	return func(options *extendedHandleOptions) {
+		options.controllersMap = controllersMap
+	}
+}
+
 type frameworkExtendedHandleImpl struct {
 	once sync.Once
 	framework.Handle
@@ -82,6 +90,7 @@ type frameworkExtendedHandleImpl struct {
 	koordinatorClientSet             koordinatorclientset.Interface
 	koordinatorSharedInformerFactory koordinatorinformers.SharedInformerFactory
 	sharedListerAdapter              SharedListerAdapter
+	controllerMaps                   *controllers.ControllersMap
 }
 
 func NewExtendedHandle(options ...Option) ExtendedHandle {
@@ -95,6 +104,7 @@ func NewExtendedHandle(options ...Option) ExtendedHandle {
 		koordinatorClientSet:             handleOptions.koordinatorClientSet,
 		koordinatorSharedInformerFactory: handleOptions.koordinatorSharedInformerFactory,
 		sharedListerAdapter:              handleOptions.sharedListerAdapter,
+		controllerMaps:                   handleOptions.controllersMap,
 	}
 }
 
@@ -253,6 +263,9 @@ func PluginFactoryProxy(extendHandle ExtendedHandle, factoryFn frameworkruntime.
 		}
 		if impl.servicesEngine != nil {
 			impl.servicesEngine.RegisterPluginService(plugin)
+		}
+		if impl.controllerMaps != nil {
+			impl.controllerMaps.RegisterControllers(plugin)
 		}
 		return plugin, nil
 	}

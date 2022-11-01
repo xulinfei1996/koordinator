@@ -168,6 +168,7 @@ func NewQuotaOverUsedRevokeController(client clientset.Interface, overUsedTrigge
 
 func (controller *QuotaOverUsedRevokeController) Start() {
 	go wait.Until(controller.revokePodDueToQuotaOverUsed, controller.revokePodCycle, nil)
+	klog.Infof("start elasticQuota QuotaOverUsedRevokeController")
 }
 
 func (controller *QuotaOverUsedRevokeController) revokePodDueToQuotaOverUsed() {

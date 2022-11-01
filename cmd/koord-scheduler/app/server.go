@@ -204,6 +204,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 			OnStartedLeading: func(ctx context.Context) {
 				close(waitingForLeader)
 				sched.Run(ctx)
+				go cc.ControllersMap.Start()
 			},
 			OnStoppedLeading: func() {
 				select {
@@ -230,6 +231,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 	// Leader election is disabled, so runCommand inline until done.
 	close(waitingForLeader)
 	sched.Run(ctx)
+	go cc.ControllersMap.Start()
 	return fmt.Errorf("finished without leader elect")
 }
 
@@ -339,6 +341,7 @@ func Setup(ctx context.Context, opts *options.Options, schedulingHooks []framewo
 		frameworkext.WithServicesEngine(cc.ServicesEngine),
 		frameworkext.WithKoordinatorClientSet(cc.KoordinatorClient),
 		frameworkext.WithKoordinatorSharedInformerFactory(cc.KoordinatorSharedInformerFactory),
+		frameworkext.WithControllersMap(cc.ControllersMap),
 	)
 
 	outOfTreeRegistry := make(runtime.Registry)

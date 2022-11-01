@@ -38,6 +38,7 @@ import (
 
 	"github.com/koordinator-sh/koordinator/pkg/scheduler/apis/config"
 	"github.com/koordinator-sh/koordinator/pkg/scheduler/apis/config/validation"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/controllers"
 	"github.com/koordinator-sh/koordinator/pkg/scheduler/plugins/elasticquota/core"
 )
 
@@ -149,13 +150,17 @@ func (g *Plugin) Start() {
 	g.createDefaultQuotaIfNotPresent()
 	g.createSystemQuotaIfNotPresent()
 
+	go wait.Until(g.migrateDefaultQuotaGroupsPod, MigrateDefaultQuotaGroupsPodCycle, nil)
+}
+
+func (g *Plugin) RegisterControllers(controllerMap controllers.ControllersMap) {
 	quotaOverUsedRevokeController := NewQuotaOverUsedRevokeController(g.handle.ClientSet(), g.pluginArgs.DelayEvictTime.Duration,
 		g.pluginArgs.RevokePodInterval.Duration, g.groupQuotaManager, *g.pluginArgs.MonitorAllQuotas)
 	elasticQuotaController := NewElasticQuotaController(g.client, g.quotaLister, g.groupQuotaManager)
-
-	go wait.Until(g.migrateDefaultQuotaGroupsPod, MigrateDefaultQuotaGroupsPodCycle, nil)
-	go quotaOverUsedRevokeController.Start()
-	go elasticQuotaController.Start()
+	controllerMap.RegisterController("quotaOverUsedRevokeController", quotaOverUsedRevokeController)
+	klog.Infof("register quotaOverUsedRevokeController")
+	controllerMap.RegisterController("quotaCRDController", elasticQuotaController)
+	klog.Infof("register quotaCRDController")
 }
 
 func (g *Plugin) Name() string {

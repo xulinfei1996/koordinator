@@ -21,6 +21,7 @@ import (
 
 	koordinatorclientset "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned"
 	koordinatorinformers "github.com/koordinator-sh/koordinator/pkg/client/informers/externalversions"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/controllers"
 	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext/services"
 )
 
@@ -30,6 +31,7 @@ type Config struct {
 	ServicesEngine                   *services.Engine
 	KoordinatorClient                koordinatorclientset.Interface
 	KoordinatorSharedInformerFactory koordinatorinformers.SharedInformerFactory
+	ControllersMap                   *controllers.ControllersMap
 }
 
 type completedConfig struct {
